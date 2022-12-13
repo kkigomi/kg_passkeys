@@ -106,6 +106,8 @@ class Passkeys
             return true;
         }
 
+        \g5_set_cache('kg-passkeys-updated', \KG_PASSKEY_VERSION_ID);
+
         return false;
     }
 

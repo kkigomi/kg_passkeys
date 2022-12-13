@@ -17,7 +17,7 @@ class Webauthn
     const AUTH_PASSWORD = 'password';
 
     private LbuchsWebAuthn $webauthn;
-    private string $rpName = 'Kkigomi Webauthn';
+    private string $rpName = 'Kkigomi G5 Webauthn';
     private string $rpId;
     private bool $userVerification = true;
     private int $timeout = 60;

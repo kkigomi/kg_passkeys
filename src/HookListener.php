@@ -14,6 +14,29 @@ class HookListener
     protected function singletonInstanceInit()
     {
         $this->currentMember = MemberFactory::currentMember();
+
+        // AJAX 요청 시 `alert()`, `alert_close()` 응답을 JSON 포맷으로 변경
+        add_event('alert', [$this, 'listenerAlertHookAction'], \G5_HOOK_DEFAULT_PRIORITY, 4);
+        add_event('alert_close', [$this, 'listenerAlertHookAction'], \G5_HOOK_DEFAULT_PRIORITY, 1);
+
+        // 아웃로그인 폼에 패스키 모달 추가
+        add_replace('outlogin_content', [$this, 'listenerOutloginContent'], \G5_HOOK_DEFAULT_PRIORITY, 2);
+
+        // bbs/login_check.php에서 비밀번호 공백 체크 무시
+        add_replace('check_empty_member_login_password', [$this, 'listenerCheckEmptyMemberLoginPassword'], 1, 2);
+
+        // bbs/login_check.php에서 비밀번호 검증 무시
+        add_replace('login_check_need_not_password', [$this, 'listenerLoginCheckNeedNotPassword'], 1, 5);
+
+        // /bbs/register_form.php 폼 접근 시 비밀번호 입력되면 패스키 세션 인증 생성
+        add_event('register_form_before', [$this, 'listenerRegisterFormBefore'], 1);
+        add_event('passkey-manage:before', [$this, 'listenerRegisterFormBefore'], 1);
+
+        // bbs/member_confirm.php 에서 비밀번호 체크와 비밀번호 비교과정을 무시합니다.
+        add_replace('member_confirm_next_url', [$this, 'listenerMemberConfirmNextUrl'], 1, 1);
+
+        // 회원 탈퇴 시 데이터 정리
+        add_event('member_leave', [$this, 'listenerMemberLeave'], 1, 1);
     }
 
     /**
@@ -63,6 +86,8 @@ class HookListener
      */
     public function listenerLoginCheckNeedNotPassword($is_social_password_check = null, $mb_id = null, $mb_password = null, $mb = null, $is_social_login = null)
     {
+        // 비로그인 상태. 패스키 세션만 존재
+
         if ($this->isPasskeyLogged($mb_id)) {
             return true;
         }
@@ -75,10 +100,12 @@ class HookListener
      */
     public function listenerMemberConfirmNextUrl($url = '')
     {
-        $currentMember = MemberFactory::currentMember();
+        if (!$this->currentMember) {
+            return $url;
+        }
 
         try {
-            if ($this->validateSessionAuth($currentMember->getId())) {
+            if ($this->validateSessionAuth($this->currentMember->getId())) {
                 $provider_name = 'passkeys';
                 $social_token = social_nonce_create($provider_name);
                 set_session('social_link_token', $social_token);
@@ -110,12 +137,15 @@ class HookListener
      */
     public function listenerRegisterFormBefore(): void
     {
-        if (!isset($_POST['mb_password']) || trim($_POST['mb_password'])) {
+        if (!$this->currentMember) {
             return;
         }
 
-        $currentMember = MemberFactory::currentMember();
-        $webauthn = new WebAuthn($currentMember, []);
+        if (!isset($_POST['mb_password']) && !trim($_POST['mb_password'])) {
+            return;
+        }
+
+        $webauthn = new WebAuthn($this->currentMember, []);
 
         $postData = new stdClass();
         $postData->password = $_POST['mb_password'];
